@@ -15,8 +15,10 @@ The tools we have for doing these classifications are varied, including scary-so
 ### Our Data
 For this exercise, we'll be using the [million song dataset](http://labrosa.ee.columbia.edu/millionsong/). There are indeed a million songs in this dataset (reflected in the 280gb download size). In the interest of practicality, we'll be using the 10,000 song subset, which still weighs in at a hefty 1.8gb _compressed_ file. You're gonna need a lot of room, so now's the time to delete all those movies you've downloaded and uninstall some games. The data comes in a mysterious new format called HDF5, which we'll be explaining shortly.
 
+We'll also need the some supplemental information, [the echo nest taste profile subset](http://labrosa.ee.columbia.edu/millionsong/tasteprofile), which includes user preference data which can be exploited for building a recommendation engine.
+
 ### Our Tools
-Our first tool of choice in the matter will be python. You'll need to install a version [appropriate for your system](http://docs.python-guide.org/en/latest/#getting-started), so take a moment to do that. You'll also need a working copy of [MongoDB](http://www.mongodb.org/) and [NumPy](http://stackoverflow.com/questions/11114225/installing-scipy-and-numpy-using-pip) as well. Get these installed, 
+Our first tool of choice in the matter will be python. You'll need to install a version [appropriate for your system](http://docs.python-guide.org/en/latest/#getting-started), so take a moment to do that. You'll also need a working copy of [MongoDB](http://www.mongodb.org/) and [NumPy](http://stackoverflow.com/questions/11114225/installing-scipy-and-numpy-using-pip) as well. Get all of these installed and clone this repository to get started.
 
 Python is a great language for data science, it's not the fastest sprinter on the block, but it has a lot of tools that make the manipulation of large datasets less painful than they would be otherwise. NumPy is one of those. Python has long been used by the science community to deal with scientific data sets. Although the nature of the analysis in those situations tends to be different, both in terms of method and scale, usage of Python for data science is a natural extension of using it for traditional science.
 
@@ -24,7 +26,55 @@ HDF5 is quickly becoming a common standard for storing large amounts of structur
 
 ...
 
-Which is unfortunately why we can't use it. The features for storing and indexing the data are amazing, but for our nefarious purposes, the inability to run it in a multi-user environment is a bit of a deal breaker. For most purposes, 'faster' and 'realtime' are strictly better, so exporting our data to HDF5, processing it, then reloading it into a database that can integrate with an online dashboard has two steps too many. Instead, we're going to load our data into a database that can cope with being a data store for our application as well as a platform for our analysis, hence MongoDB. This guide will be focused on this first step, extracting our data from its source and moving it somewhere manageable.
+Which is unfortunately why we can't use it. The features for storing and indexing the data are amazing, but for our nefarious purposes, the inability to run it in a multi-user environment is a bit of a deal breaker. For most purposes, 'faster' and 'realtime' are strictly better, so exporting our data to HDF5, processing it, then reloading it into a database that can integrate with an online dashboard has two steps too many. Instead, we're going to load our data into a database that can cope with being a data store for our application as well as a platform for our analysis, hence MongoDB. This guide will be focused on this process, extracting our data from its source and moving it somewhere manageable.
 
 ## The Process
-The process will be broken up into three parts, 
+The process will be broken up into three parts, assessing our data, reading our data, then writing our data to our data store.
+
+### Part One - Assessing our Data
+The first step is to take a look at the data we have and decide what we want out of it. The MSD includes a lot of metadata about each song, but it also includes a lot of heavily-processed audio data per song. In theory, some of this information could be used to reconstruct the original song, or at least, an approximation thereof, but that's another story altogether.
+
+Because we want to build a recommendation engine, we need to collect information that may tell us things about user's tastes. This includes obvious 'features' of a song, like genre and artist. It may also include surprising things, like BPM, danceability and song length, things which may only emerge after analysis is done. (Potentially our users could be divided cleanly, separating the world into those who like long dubstep songs and those who don't.) 
+
+Starting with the full [field list](http://labrosa.ee.columbia.edu/millionsong/pages/example-track-description), there are a few pieces of information which seem like a good idea to grab right off the bat.
+
+* `artist_name` - The artist name
+* `title` - The song title
+* `year` - The year of the song's release
+* `release` - The album the song is generally considered to be from
+* `artist_mbid` - A guid for this song from the musicbrainz service.
+* `song_id` - A guid for this song from the EchoNest service.
+* `track_id` - A guid for this song (as a track) from the EchoNest service.
+
+After that, there are a few fields which are useful in terms of organization, basically user-applied categories from different music services:
+
+* `artist_mbtags` - user applied tags from musicbrainz
+* `artist_terms` - 'terms' from echonest, another source of tags
+* `artist_terms_freq` - the frequency with which those tags are applied
+* `artist_terms_weight` - something? (FIGURE THIS OUT)
+
+The next couple are statements about the musical nature of the song, what mode is it in, what key is it in. Some statements are calculated from the audio data itself, not extracted from the original score, so they come with a confidence number.
+
+* `duration` - song length
+* `key` - the estimated key of a song
+* `key_confidence` - confidence of the estimated key
+* `mode` - song mode, major or minor
+* `mode_confidence` - confidence of the estimated mode
+* `tempo` - estimated song tempo in BPM
+* `time_signature` - estimate of the number of beats per bar
+* `time_signature_confidence` - confidence of the estimated time signature
+
+The last few numbers are calculated as aggregates of the statements from the previous statements. They're machine estimates of subjective ideas. They are potentially useful for reducing a song to a fingerprint, and we'll include them here.
+
+* `danceability` - an algorithmic estimation of the song's danceability
+* `energy` - 'energy from a listener's point of view', unknown but potentially interesting
+* `loudness` - overall loudness of a track in decibels
+* `song_hotttness` - a measure of a song's social/online activity, at the time the dataset was created
+
+We'll also need a sense of user ratings for the tracks we're analyzing. These aren't part of the primary MSD dataset, these come from the taste profile subset. This dataset is very simple, it is a single file with three fields separated by tabs
+
+* `user_id` - a guid representing a user
+* `song` - the EchoNest Song ID for the song in question
+* `play_count` - the number of times the song has been played by that user
+
+This data will be packed into two collections in mongo: one with a single document per song, containing all the fields we have highlighted above. The second collection will be for users, each document containing the user id and a subdocument containing each song and their play counts.
