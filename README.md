@@ -162,7 +162,7 @@ We'll need to make a special dispensation for `artist terms`. The terms from Ech
          "weight": 0.9}
     ]
 
-We'll make this dictionary creation a part of the `terms` @property on our object, returning it instead of a single list of words.
+We'll make this dictionary creation a part of the `terms` @property on our object, returning it instead of a single list of words. Tip: calling the `list()` function on the h5 element will return a regular python list that you can enumerate over.
 
 #### A Note about NumPy and MongoDB
 Some of the record fields appear to be integers, but will be returned as `numpy.int32` objects. MongoDB will choke when trying to insert these fields, so be sure to cast them as integers when returning them from their `@property` methods.
