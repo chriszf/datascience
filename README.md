@@ -50,16 +50,13 @@ Starting with the full [field list](http://labrosa.ee.columbia.edu/millionsong/p
 
 There are a few additional terms included as descriptive tags for the artist of a given song, but since they apply to the artist and not the song itself, we won't be including them.
 
-The next couple are statements about the musical nature of the song, what mode is it in, what key is it in. Some statements are calculated from the audio data itself, not extracted from the original score, so they come with a confidence number.
+The next couple are statements about the musical nature of the song, what mode is it in, what key is it in. Some statements are calculated from the audio data itself, not extracted from the original score, so they come with a confidence number. We'll discard the confidence number for now, although you can always add it back later.
 
 * `duration` - song length
 * `key` - the estimated key of a song
-* `key_confidence` - confidence of the estimated key
 * `mode` - song mode, major or minor
-* `mode_confidence` - confidence of the estimated mode
 * `tempo` - estimated song tempo in BPM
 * `time_signature` - estimate of the number of beats per bar
-* `time_signature_confidence` - confidence of the estimated time signature
 
 The last few numbers are calculated as aggregates of the statements from the previous statements. They're machine estimates of subjective ideas. They are potentially useful for reducing a song to a fingerprint, and we'll include them here.
 
@@ -148,6 +145,9 @@ Running our program, we get the following output:
     None
 
 I think you've guessed the next step. We need to add a property for every single field we've listed above. Go ahead and do that now. Be sure to pay attention to the potential values for each field and make sure that 'empty' values are correctly set to None.
+
+#### A Note about NumPy and MongoDB
+Some of the record fields appear to be integers, but will be returned as `numpy.int32` objects. MongoDB will choke when trying to insert these fields, so be sure to cast them as integers when returning them from their `@property` methods.
 
 ### Part Two The Sequel - Creating a unix style tool
 Now we're going to attend to the main function. We can read individual songs by filename, and we need to process all the songs on disk. Normally, we would write a function that walks the entire directory tree and finds all files that match our patterns, then create an object out of each of these files.
@@ -276,6 +276,8 @@ The only thing in question is the shape of our json document to be inserted. We 
                  {"song_id": "SOBFOVM12A58A7D494", "plays": 1} ]}
 
 We've provided a file, `user.py` which has a base upon which to build the mechanism provided above. Loop through all the lines in `train_triplets.txt`, when you encounter a new `user_id`, construct a new dictionary to be inserted into the collection. 
+
+Similar to the `songs` collection, you may want to erase the collection before inserting records, starting afresh when you run the program.
 
 ## What's Next
 From this tutorial, you should now have a mongo database named `datascience` filled with two collections, `users` and `songs`, containing all the information you need to explore the dataset. You also have enough experience building different views of the dataset, should you need to organize it differently. As a further exercise, you might try building an index of songs by the artist or album they're on. Now you're ready to attempt clustering techniques to create a recommendation system, but that's a topic for another tutorial...
