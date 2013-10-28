@@ -48,7 +48,12 @@ Starting with the full [field list](http://labrosa.ee.columbia.edu/millionsong/p
 * `song_id` - A guid for this song from the EchoNest service
 * `track_id` - A guid for this song (as a track) from the EchoNest service
 
-There are a few additional terms included as descriptive tags for the artist of a given song, but since they apply to the artist and not the song itself, we won't be including them.
+There are a few additional terms included as descriptive tags for the artist of a given song. They apply to the artist, not the song itself, so they're quite as useful as they could be, but we'll include them just in case.
+
+* `artist_mbtags` - Tags coming from the musicbrain service
+* `artist_terms` - Tags coming from the EchoNest service
+* `artist_terms_freq` - The frequency with which these tags are used to describe the artist, normalized between 0 and 1. There is a one-to-one mapping with the entries in `artist_terms`
+* `artist_terms_weight` - The relevance of each tag, independent of frequency (ie: 'british invasion' is more important in describing The Beatles, but 'rock' is used more often. [Discussion here](https://developer.echonest.com/forums/thread/353).)
 
 The next couple are statements about the musical nature of the song, what mode is it in, what key is it in. Some statements are calculated from the audio data itself, not extracted from the original score, so they come with a confidence number. We'll discard the confidence number for now, although you can always add it back later.
 
@@ -145,6 +150,19 @@ Running our program, we get the following output:
     None
 
 I think you've guessed the next step. We need to add a property for every single field we've listed above. Go ahead and do that now. Be sure to pay attention to the potential values for each field and make sure that 'empty' values are correctly set to None.
+
+We'll need to make a special dispensation for `artist terms`. The terms from EchoNest include both a `frequency` and `weight`. Rather than keep them as separate fields, we can combine them into a single json structure, like so:
+
+    terms = [
+        {"term": "rock",
+         "frequency": 1.0,
+         "weight": 0.8},
+        {"term": "british invasion",
+         "frequency": 0.7,
+         "weight": 0.9}
+    ]
+
+We'll make this dictionary creation a part of the `terms` @property on our object, returning it instead of a single list of words.
 
 #### A Note about NumPy and MongoDB
 Some of the record fields appear to be integers, but will be returned as `numpy.int32` objects. MongoDB will choke when trying to insert these fields, so be sure to cast them as integers when returning them from their `@property` methods.
