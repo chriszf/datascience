@@ -6,6 +6,7 @@ def main():
     f = open("train_triplets.txt")
     last_user_id = None
     users = client.datascience.users
+    users.remove() # Erase the existing collection
 
     for line in f:
         user_id, song_id, plays = line.split()
