@@ -1,4 +1,5 @@
 #!/bin/env python
+import tables
 
 class Song(object):
     def __init__(self, filename):
