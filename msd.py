@@ -38,6 +38,17 @@ class Song(object):
         return int(self.h5.root.analysis.songs.cols.mode[0])
 
     @property
+    def terms(self):
+        term_words = list(self.h5.root.metadata.artist_terms)
+        freqs = list(self.h5.root.metadata.artist_term_freq)
+        weight = list(self.h5.root.metadata.artist_term_weight)
+
+        combined = zip(terms, freqs, weight)
+        term_list = [ dict(zip(["term", "freq", "weight"], t)) for t in combined ]
+
+        return term_list
+
+    @property
     def json(self):
         return {"title": self.title,
                 "artist_name": self.artist_name,
