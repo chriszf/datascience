@@ -15,10 +15,12 @@ The tools we have for doing these classifications are varied, including scary-so
 ### Our Data
 For this exercise, we'll be using the [million song dataset](http://labrosa.ee.columbia.edu/millionsong/). There are indeed a million songs in this dataset (reflected in the 280gb download size). In the interest of practicality, we'll be using the 10,000 song subset, which still weighs in at a hefty 1.8gb _compressed_ file. You're gonna need a lot of room, so now's the time to delete all those movies you've downloaded and uninstall some games. The data comes in a mysterious new format called HDF5, which we'll be explaining shortly.
 
-We'll also need the some supplemental information, [the echo nest taste profile subset](http://labrosa.ee.columbia.edu/millionsong/tasteprofile), which includes user preference data which can be exploited for building a recommendation engine.
+We'll also need the some supplemental information, [the echo nest taste profile subset](http://labrosa.ee.columbia.edu/millionsong/tasteprofile), which includes user preference data which can be exploited for building a recommendation engine. Grab the full subset, which runs about 500mb.
 
 ### Our Tools
-Our first tool of choice in the matter will be python. You'll need to install a version [appropriate for your system](http://docs.python-guide.org/en/latest/#getting-started), so take a moment to do that. You'll also need a working copy of [MongoDB](http://www.mongodb.org/) and [NumPy](http://stackoverflow.com/questions/11114225/installing-scipy-and-numpy-using-pip) as well. Get all of these installed and clone this repository to get started.
+Our first tool of choice in the matter will be python. You'll need to install a version [appropriate for your system](http://docs.python-guide.org/en/latest/#getting-started), so take a moment to do that. You'll also need a working copy of [MongoDB](http://www.mongodb.org/) and [Tables](http://www.pytables.org/moin) as well. You'll also need pymongo. Get all of these installed and clone this repository to get started. As a shortcut, you can install most of these with the following command after you've cloned:
+
+    pip install -r requirements.txt
 
 Python is a great language for data science, it's not the fastest sprinter on the block, but it has a lot of tools that make the manipulation of large datasets less painful than they would be otherwise. NumPy is one of those. Python has long been used by the science community to deal with scientific data sets. Although the nature of the analysis in those situations tends to be different, both in terms of method and scale, usage of Python for data science is a natural extension of using it for traditional science.
 
@@ -72,7 +74,7 @@ We'll also need a sense of user ratings for the tracks we're analyzing. These ar
 * `song` - the EchoNest Song ID for the song in question
 * `play_count` - the number of times the song has been played by that user
 
-This data will be packed into two collections in mongo: one with a single document per song, containing all the fields we have highlighted above. The second collection will be for users, each document containing the user id and a subdocument containing each song and their play counts.
+This data will be packed into two collections in Mongo: one with a single document per song, containing all the fields we have highlighted above. The second collection will be for users, each document containing the user id and a subdocument containing each song and their play counts.
 
 ### Part Two - Reading our Data from HDF5
 Reading from HDF5 is not as straightforward as reading from a regular file, or even iterating through a SQL database query. We'll start with a test file to start exploring the data, `h5_test.py`.
@@ -85,7 +87,7 @@ Start by opening `h5_test.py` in an editor and change the filename variable to p
 The file gives us a variable, h5, which is an open file handle to the record for "I Didn't Mean To" by "Casual". If we try to print the `repr()` of the handle, we get a lot of information of the heirarchical data of the h5 file. You'll notice that it displays very much like a directory tree, which is a pretty reasonable way to organize the heterogeneous information we're trying to process.
 
     >>> print repr(h5)
-    File(filename=/Users/chriszf/src/datascience/MillionSongSubset/data/A/A/A/TRAAAAW128F429D538.h5, title='H5 Song File', mode='r', root_uep='/', filters=Filters(complevel=1, complib='zlib', shuffle=True, fletcher32=False))
+    File(filename=/Users/guest/src/datascience/MillionSongSubset/data/A/A/A/TRAAAAW128F429D538.h5, title='H5 Song File', mode='r', root_uep='/', filters=Filters(complevel=1, complib='zlib', shuffle=True, fletcher32=False))
     / (RootGroup) 'H5 Song File'
     /analysis (Group) 'Echo Nest analysis of the song'
     /analysis/bars_confidence (EArray(83,), shuffle, zlib(1)) 'array of confidence of bars'
@@ -189,3 +191,91 @@ If we ran our program now, it would sit there and never quit. We need to pipe fi
     Amor De Cabaret
     MillionSongSubset/data/A/A/A/TRAAAEF128F4273421.h5
     Something Girls
+
+Now we can put all of these records in our database.
+
+### Part Three - The Database
+The general strategy for database usage goes like this:
+
+1. Read the file
+2. Create a `Song` object
+3. Convert the song object into a json object
+4. Insert the json object into the database
+
+Mongo uses json as its storage format of choice, which is why we're using it. We've already figured out how to read the file and create a `Song` out of it, so now we just need to serialize the object into json.
+
+This is easier than it sounds, because we don't really need to turn the object into json, we just need to turn the object into a python dictionary, and as long as we don't use any odd data types in it, pymongo will serialize it just fine. Let's look at an example. We'll add a property on the `Song` class called `json` as follows:
+
+    @property
+    def json(self):
+        return {'artist': self.artist_name,
+                'title': self.title}
+
+This returns a dictionary representing the song title and name. When we try to insert this into the database, everything will be hunky dory.
+
+We've now arrived at the character building portion of this exercise. Go ahead and build out the rest of the dictionary using all of the fields from part 1... Yep. Go. Get. I'll wait.
+
+...
+
+....
+
+Done? Okay. Moving on.
+
+Let's address our Mongo database. At the beginning of our file, after the existing import statements, we'll import pymongo and immediately connect to the database. Creating a `MongoClient` object with no arguments connects to the default Mongo engine on localhost using the standard port.
+
+    import pymongo
+
+    client = pymongo.MongoClient()
+
+That's it, no fuss no muss. In Mongo, there is a notion of 'databases', and inside each database is a series of 'collections', essentially the equivalent of SQL tables. To create them, we just insert documents (rows) into them, referencing the collection by name when we do.
+
+    collection = client.my_database.my_collection
+    document_key = collection.insert({"new": "record"})
+
+This inserts a new record into the collection named `my_collection` in the database named `my_database`. When you insert a record, it must have a special field named `_id`, which is the primary key used to refer to the record. If you don't include one, it Mongo assigns an `_id` and returns it as the value from the `insert` method. Here, we store the returned key in the variable `document_key`. We don't really need it, but it's good to know about. You may be tempted to use the EchoNest song id as a primary key in our collection, but be warned: Mongo has a number of restrictions on what can be an `_id`, so unless you're careful, it's best to use the automatically assigned ones.
+
+Let's write a function that tries to insert a row into the database:
+
+    def save_to_db(song):
+        client.datascience.songs.insert(song.json)
+
+And that's it. Unless you've fiddled with Mongo's settings, you don't need to commit a transaction or anything, the song is saved to the database. Since we'll be fiddling with the database repeatedly and you don't want to insert the same song twice, you may be tempted to first check the collection to see if the song exists prior to the insert. This is cautioned against, as the database grows in size, it will take longer and longer to search for a particular record, making the process take forever. Instead, we recommend that you destroy the collection each time you run the process. The final `main` function looks like this:
+
+    def main():
+        client.datascience.songs.remove()
+        for line in sys.stdin:
+            filename = line.strip()
+            song = Song(filename)
+            save_to_db(song)
+            song.close()
+
+### Part 4 - User Data, yes I lied to you there are more parts
+Using the same techniques, we'll do the same thing for our user data. Unzip your `train_triplets.txt.zip` file now.
+
+One snag here is that we've decided to combine multiple lines into a single document to be inserted, so our loop will be a little bit different. Remember, our file looks like this:
+
+    user_id     song_id     number_of_plays
+
+Each field is separated by tabs. Because of the limitations of CSV, much of the data will be repeated, as evidenced by the first few lines:
+
+    b80344d063b5ccb3212f76538f3d9e43d87dca9e        SOAKIMP12A8C130995      1
+    b80344d063b5ccb3212f76538f3d9e43d87dca9e        SOAPDEY12A81C210A9      1
+    b80344d063b5ccb3212f76538f3d9e43d87dca9e        SOBBMDR12A8C13253B      2
+    b80344d063b5ccb3212f76538f3d9e43d87dca9e        SOBFNSP12AF72A0E22      1
+    b80344d063b5ccb3212f76538f3d9e43d87dca9e        SOBFOVM12A58A7D494      1
+
+Fortunately, the data is grouped by the user, so we don't need to keep every user record in memory. When we encounter a new user id, we can relinquish the data structure holding the previous user.
+
+The only thing in question is the shape of our json document to be inserted. We have a `user_id` which is uninteresting except that it is unique per user in our system. We also have a `song_id` which references the `song_id` from EchoNest. We'll use this field to reference the `songs` collection we created earlier. Last, we have an integer, the number of times this song has been played. Using the above 5 lines, this recommends a data structure which looks like this:
+
+    { "user_id": "b80344d063b5ccb3212f76538f3d9e43d87dca9e",
+      "songs": [ {"song_id": "SOAKIMP12A8C130995", "plays": 1},
+                 {"song_id": "SOAPDEY12A81C210A9", "plays": 1},
+                 {"song_id": "SOBBMDR12A8C13253B", "plays": 2},
+                 {"song_id": "SOBFNSP12AF72A0E22", "plays": 1},
+                 {"song_id": "SOBFOVM12A58A7D494", "plays": 1} ]}
+
+We've provided a file, `user.py` which has a base upon which to build the mechanism provided above. Loop through all the lines in `train_triplets.txt`, when you encounter a new `user_id`, construct a new dictionary to be inserted into the collection. 
+
+## What's Next
+From this tutorial, you should now have a mongo database named `datascience` filled with two collections, `users` and `songs`, containing all the information you need to explore the dataset. You also have enough experience building different views of the dataset, should you need to organize it differently. As a further exercise, you might try building an index of songs by the artist or album they're on. Now you're ready to attempt clustering techniques to create a recommendation system, but that's a topic for another tutorial...
