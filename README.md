@@ -78,3 +78,74 @@ We'll also need a sense of user ratings for the tracks we're analyzing. These ar
 * `play_count` - the number of times the song has been played by that user
 
 This data will be packed into two collections in mongo: one with a single document per song, containing all the fields we have highlighted above. The second collection will be for users, each document containing the user id and a subdocument containing each song and their play counts.
+
+### Part Two - Reading our Data from HDF5
+Reading from HDF5 is not as straightforward as reading from a regular file, or even iterating through a SQL database query. We'll start with a test file to start exploring the data, `h5_test.py`.
+
+Start by opening `h5_test.py` in an editor and change the filename variable to point to an actual file in your local copy of the MSD, it doesn't matter which. Now, run the file in python with the `-i` flag:
+
+    $ python -i h5_test.py
+    >>>
+
+The file gives us a variable, h5, which is an open file handle to the record for "I Didn't Mean To" by "Casual". If we try to print the `repr()` of the handle, we get a lot of information of the heirarchical data of the h5 file. You'll notice that it displays very much like a directory tree, which is a pretty reasonable way to organize the heterogeneous information we're trying to process.
+
+    >>> print repr(h5)
+    File(filename=/Users/chriszf/src/datascience/MillionSongSubset/data/A/A/A/TRAAAAW128F429D538.h5, title='H5 Song File', mode='r', root_uep='/', filters=Filters(complevel=1, complib='zlib', shuffle=True, fletcher32=False))
+    / (RootGroup) 'H5 Song File'
+    /analysis (Group) 'Echo Nest analysis of the song'
+    /analysis/bars_confidence (EArray(83,), shuffle, zlib(1)) 'array of confidence of bars'
+      atom := Float64Atom(shape=(), dflt=0.0)
+      maindim := 0
+      flavor := 'numpy'
+      byteorder := 'little'
+      chunkshape := (1024,)
+    /analysis/bars_start (EArray(83,), shuffle, zlib(1)) 'array of start times of bars'
+      atom := Float64Atom(shape=(), dflt=0.0)
+      maindim := 0
+      flavor := 'numpy'
+      byteorder := 'little'
+      chunkshape := (1024,)
+    ...
+
+The data is organized into 'groups', such as the the `/ (RootGroup)` and `/analysis (Group)` in the above example. You can access the groups by their path using dot notation. To access the `analysis` group, type the following:
+
+    >>> print repr(h5.root.analysis)
+    /analysis (Group) 'Echo Nest analysis of the song'
+      children := ['beats_start' (EArray), 'segments_pitches' (EArray), 'segments_confidence' (EArray), 'sections_start' (EArray), 'tatums_confidence' (EArray), 'segments_timbre' (EArray), 'segments_loudness_start' (EArray), 'sections_confidence' (EArray), 'bars_confidence' (EArray), 'segments_loudness_max_time' (EArray), 'bars_start' (EArray), 'tatums_start' (EArray), 'beats_confidence' (EArray), 'segments_start' (EArray), 'segments_loudness_max' (EArray), 'songs' (Table)]
+
+This tells us that the `analysis` group has a number of different children, such as `beats_start` which is an `EArray` and the `songs` element, which is a `Table`. To access elements of a `Table` element, we refer to it by its path, then access the `.cols.<COLUMN_NAME>` attribute, followed by a subscript referring to a specific row in the table. For example, to access the `songs` table and the `danceability` in it, we type the following:
+
+    >>> print h5.root.analysis.songs.cols.danceability[0]
+
+For most of the tables in our dataset, there will be only one row.
+
+What we need to do is find all of the fields we listed above, and identify the paths to each of them. Every column path you need is listed in the primary listing we did earlier, by printing the `repr()` of the entire h5 file. Close the `h5_test.py` file and open up `msd.py`.
+
+The paths to the different parts of the data are aggravating to access. We'll make things easier by encapsulating them in a class named `Song`. The initializer is provided for you, as well as a `close` method which you should call when you're done with a file. They simply open the file using the `tables` module and saves it as an instance attribute, and closes it, respectively. It is from this attribute we will extract the rest of the data. We'll first make `@property` for our danceability field from earlier.
+
+    class Song(object):
+        def __init__(self, filename):
+            self.h5 = tables.openFile(filename, mode="r")
+
+        @property
+        def danceability(self):
+            d = h5.root.analysis.songs.cols.danceability[0]
+            if d == 0:
+                return None
+            else:
+                return d
+
+        def close(self):
+            self.h5.close()
+
+In the documentation, a value of `0.0` for this field indicates that the value was not calculated (or unable to be calculated). We'll translate this to a `None` value in python, to remain idiomatic. Now, in our `main` function, let's try out our new property:
+
+    def main():
+        s = Song("MillionSongSubset/data/A/A/A/TRAAAAW128F429D538.h5")
+        print s.danceability
+
+Running our program, we get the following output:
+
+    (env)$ python msd.py 
+    None
+
