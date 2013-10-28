@@ -42,16 +42,11 @@ Starting with the full [field list](http://labrosa.ee.columbia.edu/millionsong/p
 * `title` - The song title
 * `year` - The year of the song's release
 * `release` - The album the song is generally considered to be from
-* `artist_mbid` - A guid for this song from the musicbrainz service.
-* `song_id` - A guid for this song from the EchoNest service.
-* `track_id` - A guid for this song (as a track) from the EchoNest service.
+* `artist_mbid` - A guid for this artist from the musicbrainz service
+* `song_id` - A guid for this song from the EchoNest service
+* `track_id` - A guid for this song (as a track) from the EchoNest service
 
-After that, there are a few fields which are useful in terms of organization, basically user-applied categories from different music services:
-
-* `artist_mbtags` - user applied tags from musicbrainz
-* `artist_terms` - 'terms' from echonest, another source of tags
-* `artist_terms_freq` - the frequency with which those tags are applied
-* `artist_terms_weight` - something? (FIGURE THIS OUT)
+There are a few additional terms included as descriptive tags for the artist of a given song, but since they apply to the artist and not the song itself, we won't be including them.
 
 The next couple are statements about the musical nature of the song, what mode is it in, what key is it in. Some statements are calculated from the audio data itself, not extracted from the original score, so they come with a confidence number.
 
@@ -143,9 +138,54 @@ In the documentation, a value of `0.0` for this field indicates that the value w
     def main():
         s = Song("MillionSongSubset/data/A/A/A/TRAAAAW128F429D538.h5")
         print s.danceability
+        s.close()
 
 Running our program, we get the following output:
 
     (env)$ python msd.py 
     None
 
+I think you've guessed the next step. We need to add a property for every single field we've listed above. Go ahead and do that now. Be sure to pay attention to the potential values for each field and make sure that 'empty' values are correctly set to None.
+
+### Part Two The Sequel - Creating a unix style tool
+Now we're going to attend to the main function. We can read individual songs by filename, and we need to process all the songs on disk. Normally, we would write a function that walks the entire directory tree and finds all files that match our patterns, then create an object out of each of these files.
+
+There's nothing wrong with this, but there's not a lot to recommend this process either, when we have a perfectly good unix utility to do this. The following command does the finding and pattern matching for us:
+
+    $ find /path/to/MSD -name "*.h5"
+
+The output of the find command can be piped into our `msd.py` program and we can consume the results one filename at a time, like so:
+
+    $ find . -name "*.h5" | python msd.py
+
+For the purposes of testing, we'll limit the number of files we pipe into our program, as processing all 10,000 songs will take a long time, so we'll use the following command instead:
+
+    $ find . -name "*.h5" | head -5 | python msd.py
+
+If we run this now, nothing will happen, as we don't use any of the data that's piped into our program. We'll fix that now. Open up msd.py, and add the following to the top:
+
+    import sys
+
+We're going to grab sys.stdin, which is a file handle referencing stdin, where unix pipes data to. Now, in our main function, we're going to loop through all the lines piped into stdin. Go ahead and erase the old contents of main:
+
+    def main():
+        for line in sys.stdin:
+            filename = line.strip()
+            print filename
+            song = Song(filename)
+            print song.title
+            song.close()
+
+If we ran our program now, it would sit there and never quit. We need to pipe filenames into it:
+
+    (env)$ find MillionSongSubset -name "*.h5" | head -5 | python msd.py 
+    MillionSongSubset/AdditionalFiles/subset_msd_summary_file.h5
+    Deep Sea Creature
+    MillionSongSubset/data/A/A/A/TRAAAAW128F429D538.h5
+    I Didn't Mean To
+    MillionSongSubset/data/A/A/A/TRAAABD128F429CF47.h5
+    Soul Deep
+    MillionSongSubset/data/A/A/A/TRAAADZ128F9348C2E.h5
+    Amor De Cabaret
+    MillionSongSubset/data/A/A/A/TRAAAEF128F4273421.h5
+    Something Girls
