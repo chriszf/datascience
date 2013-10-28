@@ -10,6 +10,7 @@ class Song(object):
 
 def main():
     s = Song("MillionSongSubset/data/A/A/A/TRAAAAW128F429D538.h5")
+    s.close()
 
 if __name__ == "__main__":
     main()
