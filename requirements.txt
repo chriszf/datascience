@@ -1,0 +1,6 @@
+Cython==0.19.2
+numexpr==2.2.2
+numpy==1.7.1
+pymongo==2.6.3
+tables==3.0.0
+wsgiref==0.1.2
